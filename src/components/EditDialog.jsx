@@ -9,12 +9,12 @@ export default function EditDialog({ open, onClose, onClear, children }) {
       aria-hidden={!open}
     >
       <div
-        className={`absolute inset-0 bg-black/40 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
       <div
         ref={dialogRef}
-        className={`absolute inset-x-0 bottom-0 sm:inset-y-0 sm:my-auto sm:max-h-[80vh] sm:max-w-lg sm:mx-auto bg-white rounded-t-2xl sm:rounded-2xl shadow-xl transition-transform ${open ? 'translate-y-0' : 'translate-y-full sm:translate-y-4'}`}
+        className={`absolute inset-x-0 bottom-0 sm:inset-y-0 sm:my-auto sm:max-h-[80vh] sm:max-w-lg sm:mx-auto bg-white rounded-t-2xl sm:rounded-2xl shadow-xl transition-transform duration-300 ${open ? 'translate-y-0' : 'translate-y-full sm:translate-y-full'}`}
         role="dialog"
         aria-modal="true"
       >
