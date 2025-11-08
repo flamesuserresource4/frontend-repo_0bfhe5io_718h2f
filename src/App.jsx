@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import Header from './components/Header';
-import WeekNavigator from './components/WeekNavigator';
-import ControlsBar from './components/ControlsBar';
-import MealGrid from './components/MealGrid';
+import TodayHeader from './components/TodayHeader';
+import MealsToday from './components/MealsToday';
+import FabEdit from './components/FabEdit';
+import EditDialog from './components/EditDialog';
 
+// Utilities for week-based storage compatible with previous data shape
 function startOfWeek(date) {
   const d = new Date(date);
   const day = d.getDay(); // 0=Sun..6=Sat
@@ -13,89 +14,85 @@ function startOfWeek(date) {
   return d;
 }
 
-function formatWeekLabel(weekStart) {
-  const fmt = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const end = new Date(weekStart.getTime() + 6 * 86400000);
-  return `${fmt.format(weekStart)} - ${fmt.format(end)}`;
-}
+const dayIndexMon0 = (date) => {
+  // Monday=0 .. Sunday=6
+  const js = date.getDay();
+  return js === 0 ? 6 : js - 1;
+};
 
 export default function App() {
-  const [weekStart, setWeekStart] = useState(startOfWeek(new Date()));
-  const [weekData, setWeekData] = useState(() => {
-    const saved = localStorage.getItem('mealplanner:data');
-    return saved ? JSON.parse(saved) : {};
+  const [today] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
   });
 
-  const key = useMemo(() => `week:${weekStart.toISOString().slice(0,10)}`, [weekStart]);
-  const data = weekData[key] || Array.from({ length: 7 }, () => ({ lunch: '', dinner: '' }));
+  // Load full storage so we remain compatible with existing week-based structure
+  const [store, setStore] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mealplanner:data');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
+  const weekKey = useMemo(() => `week:${startOfWeek(today).toISOString().slice(0, 10)}`, [today]);
+  const index = useMemo(() => dayIndexMon0(today), [today]);
+
+  const todayValues = useMemo(() => {
+    const week = store[weekKey] || Array.from({ length: 7 }, () => ({ breakfast: '', lunch: '', dinner: '' }));
+    const entry = week[index] || { breakfast: '', lunch: '', dinner: '' };
+    // Ensure fields exist even if older schema lacked breakfast
+    return { breakfast: entry.breakfast || '', lunch: entry.lunch || '', dinner: entry.dinner || '' };
+  }, [store, weekKey, index]);
+
+  // Persist on store changes
   useEffect(() => {
-    localStorage.setItem('mealplanner:data', JSON.stringify(weekData));
-  }, [weekData]);
+    localStorage.setItem('mealplanner:data', JSON.stringify(store));
+  }, [store]);
 
-  const handleChange = (index, field, value) => {
-    setWeekData(prev => {
+  const updateField = (field, value) => {
+    setStore((prev) => {
       const next = { ...prev };
-      const cur = next[key] ? [...next[key]] : Array.from({ length: 7 }, () => ({ lunch: '', dinner: '' }));
-      cur[index] = { ...cur[index], [field]: value };
-      next[key] = cur;
+      const week = next[weekKey]
+        ? next[weekKey].map((d) => ({ breakfast: d.breakfast || '', lunch: d.lunch || '', dinner: d.dinner || '' }))
+        : Array.from({ length: 7 }, () => ({ breakfast: '', lunch: '', dinner: '' }));
+      const current = week[index] || { breakfast: '', lunch: '', dinner: '' };
+      week[index] = { ...current, [field]: value };
+      next[weekKey] = week;
       return next;
     });
   };
 
-  const prevWeek = () => setWeekStart(new Date(weekStart.getTime() - 7 * 86400000));
-  const nextWeek = () => setWeekStart(new Date(weekStart.getTime() + 7 * 86400000));
-
-  const onClear = () => {
-    setWeekData(prev => ({ ...prev, [key]: Array.from({ length: 7 }, () => ({ lunch: '', dinner: '' })) }));
+  const clearToday = () => {
+    setStore((prev) => {
+      const next = { ...prev };
+      const week = next[weekKey]
+        ? next[weekKey].map((d) => ({ breakfast: '', lunch: '', dinner: '' }))
+        : Array.from({ length: 7 }, () => ({ breakfast: '', lunch: '', dinner: '' }));
+      week[index] = { breakfast: '', lunch: '', dinner: '' };
+      next[weekKey] = week;
+      return next;
+    });
   };
 
-  const onExport = () => {
-    const blob = new Blob([JSON.stringify(weekData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'menu-settimanale.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const onImport = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        if (typeof parsed === 'object' && parsed) {
-          setWeekData(parsed);
-        }
-      } catch (err) {
-        alert('File non valido');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const onPrint = () => {
-    window.print();
-  };
-
-  const onSave = () => {
-    localStorage.setItem('mealplanner:data', JSON.stringify(weekData));
-  };
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-indigo-50 text-gray-800">
-      <Header weekLabel={formatWeekLabel(weekStart)} />
-      <WeekNavigator onPrev={prevWeek} onNext={nextWeek} weekStart={weekStart} />
-      <ControlsBar onClear={onClear} onExport={onExport} onImport={onImport} onPrint={onPrint} onSave={onSave} />
-      <MealGrid weekStart={weekStart} data={data} onChange={handleChange} />
-      <footer className="max-w-6xl mx-auto px-4 py-10 text-center text-sm text-gray-500">
-        Suggerimento: fai clic su Esporta per salvare e condividere il tuo menu. Puoi importarlo in seguito.
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-indigo-50 text-gray-800">
+      <TodayHeader today={today} />
+
+      <MealsToday values={todayValues} onChange={updateField} />
+
+      <FabEdit onClick={() => setOpen(true)} />
+
+      <EditDialog open={open} onClose={() => setOpen(false)} onClear={clearToday}>
+        <MealsToday values={todayValues} onChange={updateField} />
+      </EditDialog>
+
+      <footer className="max-w-3xl mx-auto px-6 py-10 text-center text-xs text-gray-500">
+        Solo il giorno attuale. Tocca Modifica per aggiornare.
       </footer>
     </div>
   );
